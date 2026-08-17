@@ -1,0 +1,16 @@
+#cloud-config
+hostname: debian-test
+manage_etc_hosts: true
+
+users:
+  - name: adrien
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDcXsa6nsqYVag9DMM/yTIoaHSC5GU3nqIWnBSB4I/PJ adrien@lab-vms
+
+ssh_pwauth: false
+disable_root: true
+
+package_update: false
