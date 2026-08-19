@@ -39,9 +39,26 @@ if [[ -f "${KALI_DIR}/kali.qcow2" ]]; then
     fi
 fi
 
-echo "[1/4] Downloading from $KALI_URL ..."
-echo "      (large file, ~4G - please wait)"
-wget -O "${ISO_DIR}/${ARCHIVE_NAME}" "$KALI_URL"
+if [[ -f "${ISO_DIR}/${ARCHIVE_NAME}" ]]; then
+    echo "Archive already here: ${ISO_DIR}/${ARCHIVE_NAME}"
+    read -rp "Download again ? (y/N) " CONFIRM
+    if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+        echo "Verifying existing archive integrity..."
+        if ! "$SEVENZIP" t "${ISO_DIR}/${ARCHIVE_NAME}" >/dev/null 2>&1; then
+            echo "      Archive is corrupted. Removing and re-downloading..."
+            rm -f "${ISO_DIR}/${ARCHIVE_NAME}"
+        else
+            echo "      Archive OK."
+        fi
+    else
+        rm -f "${ISO_DIR}/${ARCHIVE_NAME}"
+    fi
+fi
+
+echo "[1/4] Downloading or Using from $KALI_URL ..."
+if [[ ! -f "${ISO_DIR}/${ARCHIVE_NAME}" ]]; then
+    wget -O "${ISO_DIR}/${ARCHIVE_NAME}" "$KALI_URL"
+fi
 
 echo "[2/4] Extracting .7z archive..."
 "$SEVENZIP" x "${ISO_DIR}/${ARCHIVE_NAME}" -o"${ISO_DIR}" -y >/dev/null
