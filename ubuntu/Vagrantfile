@@ -1,0 +1,89 @@
+# Vagrantfile - Blue Cape DFIR Part 2 forensic workstation
+# Provider: libvirt (Fedora host)
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "dfir-ubuntu-base"
+  config.vm.hostname = "Ubuntu-dfir"
+  config.vm.boot_timeout = 600
+  config.ssh.username = "vagrant"
+  config.ssh.insert_key = true
+
+  config.vm.provider :libvirt do |lv|
+    lv.memory = 8192
+    lv.cpus = 4
+    lv.machine_virtual_size = 150 # GB
+    lv.storage_pool_name = "nyxsoc-pool"
+    lv.graphics_type = "spice"
+    lv.video_type = "qxl"
+  end
+  
+  # Enable GUI-friendly desktop (Ubuntu server box + minimal desktop)
+  config.vm.provision "shell", inline: <<-SHELL
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get upgrade -y
+
+    # Minimal desktop environment for GUI tools (Wireshark, Autopsy, browser).
+    # xserver-xorg must be present, otherwise lightdm logs
+    # "Can't launch X server X not found in path" and no GUI appears.
+    # lightdm-gtk-greeter is also mandatory: without a greeter lightdm fails.
+    apt-get install -y \
+      xfce4 xfce4-goodies \
+      lightdm lightdm-gtk-greeter \
+      xserver-xorg xserver-xorg-video-qxl \
+      spice-vdagent
+
+    # Boot to the graphical target and auto-login the vagrant user into Xfce,
+    # so the desktop appears on the SPICE console without any manual login.
+    systemctl set-default graphical.target
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    printf '[Seat:*]\nautologin-user=vagrant\nautologin-user-timeout=0\n' \
+      > /etc/lightdm/lightdm.conf.d/50-autologin.conf
+    systemctl enable lightdm
+
+    # Core forensic / analysis tools
+    apt-get install -y \\
+      wireshark \\
+      tshark \\
+      python3 \\
+      python3-pip \\
+      python3-venv \\
+      python3-dev \\
+      pkg-config \\
+      libffi-dev \\
+      build-essential \\
+      git \\
+      curl \\
+      unzip \\
+      p7zip-full \\
+      sleuthkit \\
+      autopsy
+    
+    # Allow non-root Wireshark packet capture
+    usermod -aG wireshark vagrant || true
+
+    # Volatility3 (memory analysis)
+    pip3 install --break-system-packages volatility3 plaso || true
+
+    # Eric Zimmerman's Tools (.NET tools - requires dotnet runtime)
+    apt-get install -y dotnet-runtime-6.0 || snap install dotnet-runtime-60
+
+    mkdir -p /opt/EZTools
+
+    # Grow the root LVM to use the full virtual disk (machine_virtual_size).
+    # machine_virtual_size only inflates the raw disk; the guest's partition
+    # table, LVM and filesystem keep their small box size until resized here.
+    apt-get install -y cloud-guest-utils
+    growpart /dev/vda 3 || true
+    partx -u /dev/vda || true
+    pvresize /dev/vda3 || true
+    lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv || true
+    resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv || true
+
+    echo "Provisioning complete. Reboot recommended for desktop environment."
+  SHELL
+
+  config.vm.provision "shell", inline: "echo 'DFIR workstation ready.'", run: "always"
+end
